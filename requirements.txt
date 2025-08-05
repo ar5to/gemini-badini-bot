@@ -1,7 +1,5 @@
 python-telegram-bot==20.7
-google-generativeai
+google-generativeai>=1.0.0
 python-dotenv
+pillow
 pytesseract
-Pillow
-google-cloud-speech
-aiohttp
