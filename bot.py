@@ -34,13 +34,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_modes[update.effective_user.id] = "en_to_ku"
     keyboard = [
         [
-            InlineKeyboardButton("English → Kurdish Badini", callback_data="en_to_ku"),
-            InlineKeyboardButton("Kurdish Badini → English", callback_data="ku_to_en"),
+            InlineKeyboardButton("English → Kurdish", callback_data="en_to_ku"),
+            InlineKeyboardButton("Kurdish → English", callback_data="ku_to_en"),
         ]
     ]
     await update.message.reply_text(
         "👋 Send me any text or photo to translate.\n"
-        "Use buttons below to switch translation direction.",
+        "Use the buttons below to switch direction.",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
@@ -51,25 +51,25 @@ async def change_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mode = query.data
     user_modes[query.from_user.id] = mode
     await query.edit_message_text(
-        f"✅ Translation mode set to: {'English → Kurdish Badini' if mode == 'en_to_ku' else 'Kurdish Badini → English'}"
+        f"✅ Translation mode set to: {'English → Kurdish' if mode == 'en_to_ku' else 'Kurdish → English'}"
     )
 
 
-async def translate_text(text: str, mode: str):
+async def translate_text(text: str, mode: str) -> str:
     if mode == "en_to_ku":
         prompt = (
-            "You are an expert translator fluent in Kurdish Badini dialect. "
-            "Translate the following text into high-quality, natural Kurdish Badini:\n\n"
+            "You are a professional translator. "
+            "Translate the following text to **Kurdish Badini dialect** with natural and fluent phrasing:\n\n"
             f"{text}"
         )
     else:
         prompt = (
-            "You are an expert translator fluent in Kurdish Badini dialect. "
-            "Translate the following Kurdish Badini text into clear, natural English:\n\n"
+            "You are a professional translator. "
+            "Translate the following **Kurdish Badini** text into clear and fluent **English**:\n\n"
             f"{text}"
         )
 
-    response = await model.agenerate_text(prompt)
+    response = model.generate_content(prompt)
     return response.text.strip()
 
 
@@ -88,7 +88,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = pytesseract.image_to_string(Image.open(tf.name))
 
     if not text.strip():
-        await update.message.reply_text("❌ Could not extract text from the image.")
+        await update.message.reply_text("❌ Couldn't extract text from the image.")
         return
 
     mode = user_modes.get(update.effective_user.id, "en_to_ku")
@@ -104,7 +104,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    logging.info("Bot started.")
+    logging.info("✅ Bot started.")
     app.run_polling()
 
 
