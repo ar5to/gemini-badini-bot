@@ -1,79 +1,70 @@
 import os
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters
-)
-import google.generativeai as genai
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from google.generativeai import GenerativeModel, configure
 
-# Load secrets
 load_dotenv()
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Configure Gemini
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.5-pro")
+# Gemini setup
+configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = GenerativeModel("gemini-pro")
 
-# Language map per user
+# Telegram setup
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+# Track user translation direction (default: English → Kurdish Badini)
 user_lang = {}
 
-# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_lang[update.effective_user.id] = "en_to_ku"
     await update.message.reply_text(
         "👋 Welcome to Gemini Kurdish Bot!\n"
-        "I will translate English → Kurdish Badini (Arabic script).\n"
+        "I will translate English → Kurdish Badini.\n"
         "Use /setlang en or /setlang ku to change direction."
     )
 
-# /setlang
 async def setlang(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     args = context.args
 
-    if not args or args[0].lower() not in ["en", "ku"]:
-        await update.message.reply_text("❗ Usage: /setlang en or /setlang ku")
+    if not args or args[0] not in ["en", "ku"]:
+        await update.message.reply_text("❌ Usage: /setlang en or /setlang ku")
         return
 
-    lang = args[0].lower()
-    user_lang[user_id] = "ku_to_en" if lang == "en" else "en_to_ku"
-    await update.message.reply_text("✅ Language updated.")
+    direction = "en_to_ku" if args[0] == "en" else "ku_to_en"
+    user_lang[user_id] = direction
+    await update.message.reply_text(f"✅ Translation direction set to: {args[0]}")
 
-# Handle messages
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_input = update.message.text.strip()
+    direction = user_lang.get(user_id, "en_to_ku")
 
-    lang_pref = user_lang.get(user_id, "en_to_ku")
-
-    if lang_pref == "en_to_ku":
-        prompt = f"Translate the following English sentence into Kurdish Badini using Arabic script only:\n\n{user_input}\n\nJust return the translation only with no extra words."
+    # Clean translation prompt
+    if direction == "en_to_ku":
+        prompt = f"Translate the following sentence from English to Kurdish Badini:\n\n{user_input}"
     else:
-        prompt = f"Translate this Kurdish Badini sentence into natural English:\n\n{user_input}\n\nReturn only the translation."
+        prompt = f"Translate the following sentence from Kurdish Badini to English:\n\n{user_input}"
 
     try:
-        response = model.generate_content(prompt)
-        translated = response.text.strip()
-        # Clean redundant formatting
-        if translated.startswith("**") and translated.endswith("**"):
-            translated = translated.strip("*")
-        await update.message.reply_text(translated)
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+        response = model.generate_content(prompt, stream=True)
+        translated = "".join(chunk.text for chunk in response).strip()
+        translated = translated.replace("**", "").strip()
 
-# Run bot
+        await update.message.reply_text(translated)
+
+    except Exception as e:
+        await update.message.reply_text("⚠️ An error occurred. Please try again.")
+        print(f"Translation error: {e}")
+
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setlang", setlang))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    print("🤖 Bot is running...")
+    print("✅ Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
