@@ -10,7 +10,7 @@ from telegram.ext import (
 )
 import google.generativeai as genai
 
-# Load API keys
+# Load secrets
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -19,20 +19,19 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-pro")
 
-# Per-user language direction: { user_id: "en_to_ku" or "ku_to_en" }
+# Language map per user
 user_lang = {}
 
-# /start command
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    user_lang[user_id] = "en_to_ku"  # Default setting
+    user_lang[update.effective_user.id] = "en_to_ku"
     await update.message.reply_text(
-        "👋 Welcome to Gemini Kurdish Bot!\n\n"
+        "👋 Welcome to Gemini Kurdish Bot!\n"
         "I will translate English → Kurdish Badini (Arabic script).\n"
         "Use /setlang en or /setlang ku to change direction."
     )
 
-# /setlang command
+# /setlang
 async def setlang(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     args = context.args
@@ -42,54 +41,39 @@ async def setlang(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     lang = args[0].lower()
-    if lang == "en":
-        user_lang[user_id] = "ku_to_en"
-        await update.message.reply_text("✅ Translation set: Kurdish → English")
-    else:
-        user_lang[user_id] = "en_to_ku"
-        await update.message.reply_text("✅ Translation set: English → Kurdish Badini")
+    user_lang[user_id] = "ku_to_en" if lang == "en" else "en_to_ku"
+    await update.message.reply_text("✅ Language updated.")
 
-# Handle text messages
+# Handle messages
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_input = update.message.text.strip()
 
-    if not user_input:
-        await update.message.reply_text("❗ Please send a message to translate.")
-        return
-
     lang_pref = user_lang.get(user_id, "en_to_ku")
 
     if lang_pref == "en_to_ku":
-        prompt = f"""
-        Translate the following English text into Kurdish Badini using Arabic script.
-        Make it fluent and natural:
-
-        {user_input}
-        """
+        prompt = f"Translate the following English sentence into Kurdish Badini using Arabic script only:\n\n{user_input}\n\nJust return the translation only with no extra words."
     else:
-        prompt = f"""
-        Translate the following Kurdish Badini (Arabic script) into natural and fluent English:
-
-        {user_input}
-        """
+        prompt = f"Translate this Kurdish Badini sentence into natural English:\n\n{user_input}\n\nReturn only the translation."
 
     try:
         response = model.generate_content(prompt)
         translated = response.text.strip()
+        # Clean redundant formatting
+        if translated.startswith("**") and translated.endswith("**"):
+            translated = translated.strip("*")
         await update.message.reply_text(translated)
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# Run the bot
+# Run bot
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setlang", setlang))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    print("🤖 Gemini Badini Bot is running...")
+    print("🤖 Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
